@@ -18,7 +18,8 @@ class PayrollServiceTest {
 
     @BeforeEach
     void setUp() {
-        payrollService = new PayrollServiceImpl();
+//        payrollService = new PayrollServiceImpl();
+        payrollService = new PayrollServiceTimelineImpl();
     }
 
     @Nested
