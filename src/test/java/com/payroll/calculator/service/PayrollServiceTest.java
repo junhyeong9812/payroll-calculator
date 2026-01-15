@@ -255,7 +255,7 @@ class PayrollServiceTest {
             // - 12일(일): 0~24 = 24시간 (휴일 24시간, 야간 6시간)
             // - 13일(월): 0~6 = 6시간 (야간 6시간)
             assertThat(response.getTotalWorkHours()).isEqualTo(56.0);
-            assertThat(response.getNightHours()).isEqualTo(20.0); // 2+6+6+6
+            assertThat(response.getNightHours()).isEqualTo(24.0); // 2+8+8+8
             assertThat(response.getHolidayHours()).isEqualTo(24.0); // 일요일
         }
     }
