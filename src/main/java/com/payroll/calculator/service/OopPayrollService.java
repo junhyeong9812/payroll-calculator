@@ -10,6 +10,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -153,7 +154,28 @@ public class OopPayrollService implements PayrollService {
 
         @Override
         public BigDecimal calculate(Works works) {
-            return BigDecimal.ZERO;
+            HashMap<LocalDate, Integer> workTime = new HashMap<>();
+
+            for (Work work : works.works) {
+                workTime.merge(work.getDate(),1,Integer::sum);
+            }
+
+            // for문을 통한 연장 근무 찾기
+//            int totalOvertimeHours = 0;
+//            for (int hours: workTime.values()) {
+//                if (hours > 8) {
+//                    totalOvertimeHours += (hours - 8);
+//                }
+//            }
+
+            // stream을 활용한 연장근무 탐색
+            int totalOvertimeHours= workTime.values().stream()
+                    .filter(hours -> hours >8)
+                    .mapToInt(hours -> hours - 8)
+                    .sum();
+            return works.wage
+                    .multiply(BigDecimal.valueOf(totalOvertimeHours))
+                    .multiply(BigDecimal.valueOf(0.5));
         }
     }
 
