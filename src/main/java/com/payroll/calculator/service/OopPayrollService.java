@@ -9,9 +9,8 @@ import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.time.temporal.WeekFields;
+import java.util.*;
 import java.util.stream.Stream;
 
 @Slf4j
@@ -19,18 +18,31 @@ public class OopPayrollService implements PayrollService {
 
     @Override
     public PayrollResponse calculate(PayrollRequest request) {
+        Works works = Works.of(request);
 
+        // 1. 각 정책의 결과(시간+금액)를 받아옴
+        PolicyResult basic = new BasicPayPolicy().calculate(works);
+        PolicyResult overtime = new OverTimePayPolicy().calculate(works);
+        PolicyResult night = new NightPayPolicy().calculate(works);
+        PolicyResult holiday = new HolidayPayPolicy().calculate(works);
+        PolicyResult weekly = new WeeklyHolidayPayPolicy().calculate(works);
+
+        // 2. 총액 계산
+        BigDecimal totalPay = basic.pay().add(overtime.pay()).add(night.pay())
+                .add(holiday.pay()).add(weekly.pay());
+
+        // 3. 빌더에 매핑 (누락 없이 깔끔하게!)
         return PayrollResponse.builder()
-                .totalWorkHours(0)
-                .overtimeHours(0)
-                .nightHours(0)
-                .holidayHours(0)
-                .basePay(0)
-                .overtimePay(0)
-                .nightPay(0)
-                .holidayPay(0)
-                .weeklyHolidayPay(0)
-                .totalPay(0)
+                .totalWorkHours(works.count())
+                .basePay(basic.pay().longValue())
+                .overtimeHours((int) overtime.hours())
+                .overtimePay(overtime.pay().longValue())
+                .nightHours((int) night.hours())
+                .nightPay(night.pay().longValue())
+                .holidayHours((int) holiday.hours())
+                .holidayPay(holiday.pay().longValue())
+                .weeklyHolidayPay(weekly.pay().longValue())
+                .totalPay(totalPay.longValue())
                 .build();
     }
     /**
@@ -71,6 +83,31 @@ public class OopPayrollService implements PayrollService {
 
         public int count() {
             return works.size();
+        }
+
+//        public Map<LocalDate, Integer> getWeeklyWorkHours() {
+//            Map<LocalDate, Integer> weeklyMap = new HashMap<>();
+//
+//            for (Work work : works) {
+//                LocalDate date = work.getDate();
+//                int dayValue = date.getDayOfWeek().getValue();
+//                LocalDate startOfThisWeek = date.minusDays(dayValue - 1);
+//
+//                weeklyMap.merge(startOfThisWeek, 1, Integer::sum);
+//            }
+//            return weeklyMap;
+//        }
+
+        public Map<Integer, Integer> getWeeklyWorkHours() {
+            WeekFields weekFields = WeekFields.of(Locale.KOREA);
+            Map<Integer, Integer> weeklyMap = new HashMap<>();
+
+            for (Work work: works) {
+                int weekOfYear = work.getDate().get(weekFields.weekBasedYear());
+
+                weeklyMap.merge(weekOfYear, 1, Integer::sum);
+            }
+            return weeklyMap;
         }
 
 //        public static Works of(PayrollRequest payrollRequest) {
@@ -141,32 +178,29 @@ public class OopPayrollService implements PayrollService {
         }
     }
 
-    public class Week {
-
-    }
-
     public interface PayPolicy {
-        BigDecimal calculate(Works works);
+        PolicyResult calculate(Works works);
     }
 
     public class BasicPayPolicy implements PayPolicy {
 
         @Override
-        public BigDecimal calculate(Works works) {
-            int workCount = works.count();
-            return works.wage.multiply(BigDecimal.valueOf(workCount));
+        public PolicyResult calculate(Works works) {
+            int totalHours = works.count();
+            BigDecimal pay = works.wage.multiply(BigDecimal.valueOf(totalHours));
+            return PolicyResult.of(pay, totalHours);
         }
     }
 
     public class OverTimePayPolicy implements PayPolicy {
 
         @Override
-        public BigDecimal calculate(Works works) {
-//            HashMap<LocalDate, Integer> workTime = new HashMap<>();
-//
-//            for (Work work : works.works) {
-//                workTime.merge(work.getDate(),1,Integer::sum);
-//            }
+        public PolicyResult calculate(Works works) {
+            HashMap<LocalDate, Integer> workTime = new HashMap<>();
+
+            for (Work work : works.works) {
+                workTime.merge(work.getDate(),1,Integer::sum);
+            }
 
             // for문을 통한 연장 근무 찾기
 //            int totalOvertimeHours = 0;
@@ -177,29 +211,92 @@ public class OopPayrollService implements PayrollService {
 //            }
 
             // stream을 활용한 연장근무 탐색
-            int totalOvertimeHours= works.getWorkTime().values().stream()
+            int totalOvertimeHours= workTime.values().stream()
                     .filter(hours -> hours >8)
                     .mapToInt(hours -> hours - 8)
                     .sum();
-            return works.wage
-                    .multiply(BigDecimal.valueOf(totalOvertimeHours))
+            BigDecimal pay = works.wage.multiply(BigDecimal.valueOf(totalOvertimeHours))
                     .multiply(BigDecimal.valueOf(0.5));
+            return PolicyResult.of(pay, totalOvertimeHours);
         }
     }
 
     public class NightPayPolicy implements PayPolicy {
 
         @Override
-        public BigDecimal calculate(Works works) {
-            return BigDecimal.ZERO;
+        public PolicyResult calculate(Works works) {
+            long totalNightHours = works.works.stream()
+                    .filter(Work::isNight)
+                    .count();
+            BigDecimal pay = works.wage.multiply(BigDecimal.valueOf(totalNightHours))
+                    .multiply(BigDecimal.valueOf(0.5));
+            return PolicyResult.of(pay, (double) totalNightHours);
         }
     }
 
-    public class HolicayPayPolicy implements PayPolicy {
+    public class HolidayPayPolicy implements PayPolicy {
 
         @Override
-        public BigDecimal calculate(Works works) {
-            return BigDecimal.ZERO;
+        public PolicyResult calculate(Works works) {
+            HashMap<LocalDate, Integer> holidayWorkTime= new HashMap<>();
+//            List<Work> HolidayWork = works.works.stream()
+//                    .filter(Work::isHoliday)
+//                    .toList();
+//            for (Work work : HolidayWork) {
+//                holidayWorkTime.merge(work.getDate(),1,Integer::sum);
+//            }
+            //  위리스트 코드를 스트림으로 만든다면?
+            works.works.stream()
+                    .filter(Work::isHoliday)
+                    .forEach(work -> holidayWorkTime.merge(work.getDate(),1,Integer::sum));
+
+            long totalHolidayHoursOver8 = holidayWorkTime.values().stream()
+                    .filter(hours -> hours > 8)
+                    .mapToInt(hours -> hours - 8)
+                    .sum();
+            long totalHolidayHoursUnder8 = holidayWorkTime.values().stream()
+                    .mapToInt(hours -> Math.min(hours,8))
+                    .sum();
+
+            BigDecimal pay = works.wage.multiply(BigDecimal.valueOf(totalHolidayHoursUnder8)).multiply(BigDecimal.valueOf(0.5))
+                    .add(works.wage.multiply(BigDecimal.valueOf(totalHolidayHoursOver8))); // 100% 가산
+
+            return PolicyResult.of(pay, totalHolidayHoursUnder8 + totalHolidayHoursOver8);
+        }
+    }
+
+    public class WeeklyHolidayPayPolicy implements PayPolicy {
+
+        @Override
+        public PolicyResult calculate(Works works) {
+            HashMap<LocalDate, Integer> weekly = new HashMap<>();
+            for(Work work: works.works) {
+                LocalDate date = work.getDate();
+                int dayValue= date.getDayOfWeek().getValue();
+                LocalDate startOfThisWeek = date.minusDays(dayValue - 1);
+                weekly.merge(startOfThisWeek, 1,Integer::sum);
+            }
+//            Map<LocalDate, Integer> weekly = works.getWeeklyWorkHours();
+
+            return weekly.values().stream()
+                    .filter(hours -> hours >= 15)
+                    .map(hours -> {
+                        // 인정되는 주휴 시간 계산 (기존 변수명 유지)
+                        double weeklyHolidayHours = (Math.min(hours, 40) / 40.0) * 8.0;
+                        BigDecimal pay = works.wage.multiply(BigDecimal.valueOf(weeklyHolidayHours));
+
+                        // 중간 결과를 PolicyResult에 임시 저장
+                        return PolicyResult.of(pay, weeklyHolidayHours);
+                    })
+                    .reduce(PolicyResult.of(BigDecimal.ZERO, 0), (a, b) ->
+                            PolicyResult.of(a.pay().add(b.pay()), a.hours() + b.hours())
+                    );
+        }
+    }
+
+    public record PolicyResult(BigDecimal pay, double hours) {
+        public static PolicyResult of(BigDecimal pay, double hours) {
+            return new PolicyResult(pay, hours);
         }
     }
 }

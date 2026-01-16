@@ -20,7 +20,8 @@ class PayrollServiceTest {
     void setUp() {
 //        payrollService = new PayrollServiceImpl();
 //        payrollService = new PayrollServiceTimelineImpl();
-        payrollService = new PayrollServiceLegacyImpl();
+//        payrollService = new PayrollServiceLegacyImpl();
+        payrollService = new OopPayrollService();
     }
 
     @Nested
