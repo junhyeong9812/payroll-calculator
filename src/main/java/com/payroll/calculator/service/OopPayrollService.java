@@ -53,12 +53,20 @@ public class OopPayrollService implements PayrollService {
      **/
 
     public static class Works {
+        HashMap<LocalDate, Integer> workTime = new HashMap<>();
         private final List<Work> works;
         private final BigDecimal wage;
 
         public Works(List<Work> works, BigDecimal wage) {
+            for (Work work : works) {
+                workTime.merge(work.getDate(),1,Integer::sum);
+            }
             this.works = works;
             this.wage = wage;
+        }
+
+        public HashMap<LocalDate, Integer> getWorkTime() {
+            return workTime;
         }
 
         public int count() {
@@ -154,11 +162,11 @@ public class OopPayrollService implements PayrollService {
 
         @Override
         public BigDecimal calculate(Works works) {
-            HashMap<LocalDate, Integer> workTime = new HashMap<>();
-
-            for (Work work : works.works) {
-                workTime.merge(work.getDate(),1,Integer::sum);
-            }
+//            HashMap<LocalDate, Integer> workTime = new HashMap<>();
+//
+//            for (Work work : works.works) {
+//                workTime.merge(work.getDate(),1,Integer::sum);
+//            }
 
             // for문을 통한 연장 근무 찾기
 //            int totalOvertimeHours = 0;
@@ -169,7 +177,7 @@ public class OopPayrollService implements PayrollService {
 //            }
 
             // stream을 활용한 연장근무 탐색
-            int totalOvertimeHours= workTime.values().stream()
+            int totalOvertimeHours= works.getWorkTime().values().stream()
                     .filter(hours -> hours >8)
                     .mapToInt(hours -> hours - 8)
                     .sum();
