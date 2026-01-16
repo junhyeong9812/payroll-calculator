@@ -6,6 +6,8 @@ import com.payroll.calculator.dto.WorkRecordRequest;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,6 +60,10 @@ public class OopPayrollService implements PayrollService {
             this.wage = wage;
         }
 
+        public int count() {
+            return works.size();
+        }
+
 //        public static Works of(PayrollRequest payrollRequest) {
 //            List<Work> works = payrollRequest.getRecords().stream()
 //                    .flatMap(record -> splitRecord(payrollRequest.getYear(), payrollRequest.getMonth(), record).stream())
@@ -100,6 +106,19 @@ public class OopPayrollService implements PayrollService {
     public static class Work {
         private final LocalDateTime dateTime;
 
+        public boolean isNight() {
+            int hour = dateTime.getHour();
+            return hour >= 22 || hour < 6;
+        }
+
+        public boolean isHoliday() {
+            return dateTime.getDayOfWeek() == DayOfWeek.SUNDAY;
+        }
+
+        public LocalDate getDate() {
+            return dateTime.toLocalDate();
+        }
+
         private Work(LocalDateTime dateTime) {
             this.dateTime = dateTime;
         }
@@ -125,7 +144,8 @@ public class OopPayrollService implements PayrollService {
 
         @Override
         public BigDecimal calculate(Works works) {
-            return BigDecimal.ZERO;
+            int workCount = works.count();
+            return works.wage.multiply(BigDecimal.valueOf(workCount));
         }
     }
 
